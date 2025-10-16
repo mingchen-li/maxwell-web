@@ -1,33 +1,483 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>我的主页</title>
-  <link rel="stylesheet" href="style.css">
+    <title>Protein ΔΔG Landscape Calculator</title>
+    <link rel="icon" href="https://avatars.githubusercontent.com/u/112298989?s=200&v=4" type="image/png">
+    <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            height: 60px;
+            margin-right: 20px;
+        }
+        .matrix-container {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+        .heatmap-container {
+            width: 100%;
+            height: auto;
+            min-height: 600px;
+            margin-top: 20px;
+            overflow-y: auto;
+        }
+        .table-container {
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        table {
+            border-collapse: collapse;
+            min-width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+        }
+        th {
+            position: sticky;
+            top: 0;
+            background-color: #f2f2f2;
+        }
+        th:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background-color: #f2f2f2;
+        }
+        td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .info-box {
+            background-color: #e7f3fe;
+            border-left: 6px solid #2196F3;
+            margin-bottom: 15px;
+            padding: 10px;
+        }
+        .error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .button-container {
+            margin-top: 15px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .hidden {
+            display: none;
+        }
+        .tabs {
+            margin-top: 20px;
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+        .tab-button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            color: black;
+        }
+        .tab-button:hover {
+            background-color: #ddd;
+        }
+        .tab-button.active {
+            background-color: #ccc;
+        }
+        .tab-content {
+            display: none;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-top: none;
+        }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>欢迎来到我的主页 👋</h1>
-    <p>这是一个托管在 GitHub Pages 上的个人网站。</p>
-  </header>
+    <div class="header">
+        <img src="https://avatars.githubusercontent.com/u/112298989?s=200&v=4" alt="Venus-Maxwell Logo" class="logo">
+        <h1>Venus-Maxwell: A Protein ΔΔG Landscape Predictor</h1>
+    </div>
 
-  <section id="about">
-    <h2>关于我</h2>
-    <p>你好！我是一个热爱编程与技术的开发者，喜欢用代码创造有趣的东西。</p>
-  </section>
+    <div class="info-box">
+        <p><strong>Note:</strong> This tool only accepts PDB files containing a single protein chain. Multi-chain proteins are not supported.</p>
+        <p><strong>Note:</strong> The predicted values shown are relative values, a <strong>lower</strong> value means more stable. The absolute values do not have physical meaning.</p>
+        <p><strong>Privacy:</strong> We do not store any PDB files uploaded to this service. All processing is done in memory and files are discarded after analysis.</p>
+    </div>
 
-  <section id="projects">
-    <h2>我的项目</h2>
-    <ul>
-      <li><a href="#">项目 A — 一个有趣的网页应用</a></li>
-      <li><a href="#">项目 B — 数据可视化实验</a></li>
-      <li><a href="#">项目 C — 开源工具包</a></li>
-    </ul>
-  </section>
+    <form id="uploadForm">
+        <input type="file" name="file" accept=".pdb" required>
+        <button type="submit">Calculate ΔΔG Landscape</button>
+    </form>
 
-  <footer>
-    <p>© 2025 我的名字 | <a href="https://github.com/你的用户名">GitHub</a></p>
-  </footer>
+    <div id="result" class="matrix-container"></div>
+
+    <div id="visualization" class="hidden">
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'heatmapTab')">Heatmap</button>
+            <button class="tab-button" onclick="openTab(event, 'tableTab')">Data Table</button>
+        </div>
+
+        <div id="heatmapTab" class="tab-content" style="display: block;">
+            <div id="heatmap" class="heatmap-container"></div>
+            <div class="button-container">
+                <button id="downloadPNG">Download PNG</button>
+                <button id="downloadSVG">Download SVG</button>
+                <button id="downloadCSV">Download CSV</button>
+                <button id="downloadSortedCSV">Download Sorted CSV</button>
+            </div>
+        </div>
+
+        <div id="tableTab" class="tab-content">
+            <div id="dataTable" class="table-container"></div>
+        </div>
+    </div>
+
+    <script>
+        function openTab(evt, tabName) {
+            var i, tabContent, tabButtons;
+
+            tabContent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabContent.length; i++) {
+                tabContent[i].style.display = "none";
+            }
+
+            tabButtons = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].className = tabButtons[i].className.replace(" active", "");
+            }
+
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        function createHeatmap(data, vizConfig) {
+            const landscape = data.landscape;
+            const sequence = data.sequence;
+            const positions = data.positions;
+            const aminoAcids = data.amino_acids;
+
+            // Create position + wild-type amino acid labels for the x-axis
+            const xLabels = [];
+            for (let i = 0; i < sequence.length; i++) {
+                xLabels.push(`${positions[i]}${sequence[i]}`);
+            }
+
+            const matrixData = [{
+                z: landscape,
+                type: 'heatmap',
+                colorscale: vizConfig.colormap || 'Viridis',
+                zmin: -20,
+                zmax: 20,
+                hovertemplate: 'Position: %{x}<br>Amino Acid: %{y}<br>ΔΔG Score: %{z}<extra></extra>',
+                transpose: true
+            }];
+
+            const layout = {
+                xaxis: {
+                    title: 'Sequence Position',
+                    tickvals: [...Array(landscape.length).keys()],
+                    ticktext: xLabels,
+                    automargin: true,
+                    fixedrange: true
+                },
+                yaxis: {
+                    title: 'Amino Acid',
+                    tickvals: [...Array(aminoAcids.length).keys()],
+                    ticktext: aminoAcids,
+                    automargin: true,
+                    fixedrange: true
+                },
+                margin: {
+                    l: 80,
+                    r: 50,
+                    b: 120,  // Increased bottom margin for position labels
+                    t: 100,
+                    pad: 4
+                },
+                height: 600,
+                width: 900,
+                dragmode: false
+            };
+
+            // If sequence is long, adjust width to accommodate all positions
+            if (landscape.length > 30) {
+                layout.width = Math.max(900, landscape.length * 25);
+            }
+
+            const plotlyConfig = {
+                responsive: true,
+                scrollZoom: false,  // Disable scroll zoom
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'protein_ddg_landscape',
+                    height: 800,
+                    width: Math.max(1200, landscape.length * 25),
+                    scale: 2
+                },
+                // Disable all zoom and pan functionality
+                displayModeBar: true,
+                modeBarButtonsToRemove: [
+                    'zoomIn2d', 'zoomOut2d', 'zoom2d', 'pan2d', 'autoScale2d',
+                    'resetScale2d', 'lasso2d', 'select2d'
+                ],
+                doubleClick: false,
+                showAxisDragHandles: false,
+                showAxisRangeEntryBoxes: false
+            };
+
+            Plotly.newPlot('heatmap', matrixData, layout, plotlyConfig);
+
+            // Completely prevent all mouse wheel events on the heatmap
+            document.getElementById('heatmap').addEventListener('wheel', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }, { passive: false });
+        }
+
+        function createTable(data) {
+            const landscape = data.landscape;
+            const sequence = data.sequence;
+            const positions = data.positions;
+            const aminoAcids = data.amino_acids;
+
+            // Create table header with position+wild type labels
+            let table = '<table><thead><tr><th>Amino Acid</th>';
+            for (let i = 0; i < sequence.length; i++) {
+                table += `<th>${positions[i]}${sequence[i]}</th>`;
+            }
+            table += '</tr></thead><tbody>';
+
+            // Create table rows with amino acids and scores
+            for (let j = 0; j < aminoAcids.length; j++) {
+                table += `<tr><td>${aminoAcids[j]}</td>`;
+                for (let i = 0; i < landscape.length; i++) {
+                    // Highlight the wild-type amino acid
+                    const isWildType = sequence[i] === aminoAcids[j];
+                    const cellStyle = isWildType ? 'background-color: #e6ffe6;' : '';
+                    table += `<td style="${cellStyle}">${landscape[i][j].toFixed(4)}</td>`;
+                }
+                table += '</tr>';
+            }
+            table += '</tbody></table>';
+
+            return table;
+        }
+
+        function downloadCSV(data) {
+            const landscape = data.landscape;
+            const sequence = data.sequence;
+            const positions = data.positions;
+            const aminoAcids = data.amino_acids;
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+
+            // Add header row with position + wild-type amino acid labels
+            csvContent += "Amino Acid," + sequence.map((aa, i) => `${positions[i]}${aa}`).join(",") + "\r\n";
+
+            // Add data rows with amino acids
+            for (let j = 0; j < aminoAcids.length; j++) {
+                let csvRow = aminoAcids[j];
+                for (let i = 0; i < landscape.length; i++) {
+                    csvRow += "," + landscape[i][j].toFixed(4);
+                }
+                csvContent += csvRow + "\r\n";
+            }
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "protein_landscape_data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function downloadSortedCSV(data) {
+            const landscape = data.landscape;
+            const sequence = data.sequence;
+            const positions = data.positions;
+            const aminoAcids = data.amino_acids;
+
+            // Create an array of all mutations with their scores
+            const mutations = [];
+            for (let i = 0; i < landscape.length; i++) {
+                const wildType = sequence[i];
+                const position = positions[i];
+                const positionIndex = i; // Store the index for sequence building
+
+                for (let j = 0; j < aminoAcids.length; j++) {
+                    const mutation = aminoAcids[j];
+                    // Skip if mutation is the same as wild-type
+                    if (mutation === wildType) continue;
+
+                    // Create mutated sequence by copying the original and replacing one position
+                    const mutatedSequence = [...sequence];
+                    mutatedSequence[positionIndex] = mutation;
+
+                    mutations.push({
+                        position: position,
+                        wildType: wildType,
+                        mutation: mutation,
+                        score: landscape[i][j],
+                        mutatedSequence: mutatedSequence.join('')
+                    });
+                }
+            }
+
+            // Sort mutations by score in descending order
+            mutations.sort((a, b) => b.score - a.score);
+
+            // Generate CSV content
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Position,Wild-type,Mutation,Score,Mutated Sequence\r\n";
+
+            for (const mutation of mutations) {
+                csvContent += `${mutation.position},${mutation.wildType},${mutation.mutation},${mutation.score.toFixed(4)},${mutation.mutatedSequence}\r\n`;
+            }
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "sorted_mutations.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const resultDiv = document.getElementById('result');
+            const visualizationDiv = document.getElementById('visualization');
+
+            // Disable form elements during processing
+            const fileInput = document.querySelector('input[type="file"]');
+            const submitButton = document.querySelector('button[type="submit"]');
+            fileInput.disabled = true;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Processing...';
+
+            try {
+                resultDiv.innerHTML = 'Processing...';
+                visualizationDiv.classList.add('hidden');
+
+                const response = await fetch('/maxwell/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const responseData = await response.json();
+
+                if (responseData.error) {
+                    resultDiv.innerHTML = `<div class="error">Error: ${responseData.error}</div>`;
+                    return;
+                }
+
+                // Show success message
+                resultDiv.innerHTML = '<div class="info-box">Processing successful! Please see the ΔΔG heatmap and data table below.</div>';
+
+                // Show visualization area
+                visualizationDiv.classList.remove('hidden');
+
+                // Create heatmap
+                createHeatmap(responseData.data, responseData.visualization);
+
+                // Create data table
+                document.getElementById('dataTable').innerHTML = createTable(responseData.data);
+
+                // Set download button events
+                document.getElementById('downloadPNG').onclick = function() {
+                    Plotly.downloadImage('heatmap', {
+                        format: 'png',
+                        filename: 'protein_ddg_landscape',
+                        height: 800,
+                        width: Math.max(1200, responseData.data.landscape.length * 25),
+                        scale: 2
+                    });
+                };
+
+                document.getElementById('downloadSVG').onclick = function() {
+                    Plotly.downloadImage('heatmap', {
+                        format: 'svg',
+                        filename: 'protein_ddg_landscape',
+                        height: 800,
+                        width: Math.max(1200, responseData.data.landscape.length * 25)
+                    });
+                };
+
+                document.getElementById('downloadCSV').onclick = function() {
+                    downloadCSV(responseData.data);
+                };
+
+                document.getElementById('downloadSortedCSV').onclick = function() {
+                    downloadSortedCSV(responseData.data);
+                };
+
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                // Re-enable form elements after processing
+                fileInput.disabled = false;
+                submitButton.disabled = false;
+                submitButton.textContent = 'Calculate Landscape';
+            }
+        };
+    </script>
+
+    <hr style="margin-top: 40px; margin-bottom: 20px;">
+
+    <div class="citation-section">
+        <h2>How to Cite</h2>
+        <p>If you use this tool in your research, please consider citing our work:</p>
+        <div class="citation-box" style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #2196F3; margin-bottom: 20px;">
+            <p style="font-family: monospace; white-space: pre-wrap;">Yuanxi Y, Fan J, et al. (2025). Maxwell: Rapid learning of protein-mutation stability landscapes using protein language models.
+bioRxiv, 2025.xx.xx.xxxx</p>
+        </div>
+        <p>BibTeX format:</p>
+        <pre style="background-color: #f9f9f9; padding: 15px; overflow-x: auto; font-size: 0.9em;">@article{maxwell,
+    author = {Yuanxi Y, Fan J, et al.},
+    title = {Maxwell: Rapid learning of protein-mutation stability landscapes using protein language models},
+    journal = {bioRxiv},
+    year = {2025},
+    pages = {2025.xx.xx.xxxx}
+}</pre>
+    </div>
+
+    <hr style="margin-top: 40px; margin-bottom: 20px;">
+
+    <footer style="margin-top: 30px; text-align: center; color: #666; font-size: 0.9em;">
+        <p>Developed by <a href="https://ins.sjtu.edu.cn/people/lhong/index.html" target="_blank" style="color: #2196F3; text-decoration: none;">Liang's Group</a> at Shanghai Jiao Tong University</p>
+        <p>Questions or issues? Contact us at <a href="mailto:lmc@mail.ecust.edu.cn" style="color: #2196F3; text-decoration: none;">lmc@mail.ecust.edu.cn</a></p>
+    </footer>
 </body>
-</html>
